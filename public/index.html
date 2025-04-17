@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+   <!-- <script src="https://www.google.com/recaptcha/api.js" async defer></script>-->
+    <title>YNL Wars</title>
+    <link rel="icon" type="image/png" href=" favicon-3.png">
+    <link rel="stylesheet" href="styles.css">
+  
+</head>
+<body>
+    <div id="gameWrapper">
+        <canvas id="gameCanvas" width="1500" height="900"></canvas>
+    </div>    
+    <canvas id="spaceBackground"></canvas>
+    <div id="zugangscodeOverlay" style="position:fixed; top:0; left:0; width:100%; height:100%; background:#000000d9; z-index:9999; display:flex; justify-content:center; align-items:center; flex-direction:column;">
+        <h2 style="color:white;">🔒 Zugangscode erforderlich</h2>
+        <input type="password" id="masterzugangscodeInput" placeholder="Master-Zugangscode" style="padding:10px; border-radius:5px; border:none;">
+        <button onclick="submitMasterzugangscode()" style="margin-top:10px; padding:10px 20px;">Bestätigen</button>
+        <p id="masterzugangscodeError" style="color:red; display:none; margin-top:10px;">❌ Falscher Zugangscode</p>
+    </div>
+    <div style="height: 40px;"></div>
+    
+
+<div id="teamSelection">
+    
+        <h2>Willkommen bei YNL Wars</h2>
+        <input type="text" id="username" autocomplete="off" placeholder="Gib deinen Namen ein" required>
+        <br>
+        <h3>Wähle deine Klasse</h3>
+        <button id="classicButton" class="class-button selected" onclick="selectClass('classic')">Klassisch</button>
+        <button id="sniperButton" class="class-button" onclick="selectClass('sniper')">Scharfschütze</button>
+        <button id="shotgunButton" class="class-button" onclick="selectClass('shotgun')">Shotgun</button>
+        <div class="class-description" id="classDescription">
+            Klassisch: Standard-Klasse mit normalem Schaden und Cooldown
+        </div>
+        <br>
+        <h3>Wähle dein Team</h3>
+        <button class="team-button" data-team="red" onclick="chooseTeam('red')">Rotes Team</button>
+        <button class="team-button" data-team="blue" onclick="chooseTeam('blue')">Blaues Team</button>
+      <!--  <div class="g-recaptcha" data-sitekey="6LfVLxMrAAAAAOpPb9VCZH_XI2IEClFTf3cwpH_x"></div> --> 
+    </div>
+
+    <div id="chatContainer" class="collapsed">
+        <div id="chatHeader">
+            <h3>Chat</h3>
+            <span id="chatToggle">▼</span>
+        </div>
+    <ul id="chatMessages"></ul>
+    <form id="chatForm">
+            <input type="text" id="chatInput" placeholder="Nachricht eingeben...">
+        <button type="submit">Senden</button>
+    </form>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+    <script type="module" src="game.js"></script>
+    <script src="js/chat-toggle.js" defer></script>
+    <script src="js/zugangscode-check.js" defer></script>
+    <script src="js/starfield.js" defer></script>
+         
+</body>
+</html>
