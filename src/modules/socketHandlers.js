@@ -1,7 +1,7 @@
 import { players, projectiles, chatMessages, score, flag, medikits, armors } from './gameState.js';
 import { walls, redSpawn, blueSpawn, classes } from './gameConfig.js';
 import { checkCollision, checkBorderCollision } from './collisionUtils.js';
-import axios from 'axios';
+
 
 
 export function setupSocketHandlers(io, gameState) {
@@ -13,44 +13,14 @@ export function setupSocketHandlers(io, gameState) {
         socket.emit('updateSpeedBoosters', gameState.speedBoosters);
 
         socket.on('chooseTeam', async (data) => {
-            const { username, team, class: playerClass /*, captcha */} = data || {};
+            const { username, team, class: playerClass } = data || {};
         
             if (!username || !team || !playerClass) {
                 console.error("❌ Fehler: `username`, `team` oder `class` ist undefined!", { username, team, playerClass });
                 socket.emit('errorMessage', 'Fehlende Daten für Team-Auswahl.');
                 return;
             }
-        /*
-            if (!captcha) {
-                console.warn("⚠️ Kein CAPTCHA-Token erhalten!");
-                socket.emit('errorMessage', 'Bitte löse das CAPTCHA, bevor du weitermachst.');
-                return;
-            }
         
-            try {
-                // CAPTCHA-Verifizierung mit Google
-                const verifyURL = 'https://www.google.com/recaptcha/api/siteverify';
-                const params = new URLSearchParams();
-                params.append('secret', process.env.RECAPTCHA_SECRET);
-                params.append('response', captcha);
-        
-                const { data: captchaRes } = await axios.post(verifyURL, params);
-        
-                if (!captchaRes.success) {
-                    console.warn("🚫 CAPTCHA ungültig:", captchaRes);
-                    socket.emit('errorMessage', 'Ungültiges CAPTCHA. Bitte erneut versuchen.');
-                    return;
-                }
-        
-                console.log(`✅ CAPTCHA erfolgreich für Benutzer ${username}`);
-        
-             
-        
-            } catch (error) {
-                console.error("❌ Fehler bei CAPTCHA-Verifizierung:", error);
-                socket.emit('errorMessage', 'Fehler bei der CAPTCHA-Verifizierung.');
-            }
-            */
             // Prüfe, ob das Spiel bereits läuft
             const gameIsRunning = Object.keys(players).length > 0 && (score.red > 0 || score.blue > 0);
             const isFlagAtSpawn = flag.x === 750 && flag.y === 400 && !flag.holder;
