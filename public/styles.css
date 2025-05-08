@@ -367,13 +367,6 @@ body {
         display: block;
     }
 }
-
-.g-recaptcha {
-    display: flex;
-    justify-content: center;
-    margin-top: 20px;
-}
-
         #spaceBackground {
     position: fixed;
     top: 0;

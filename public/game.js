@@ -1037,22 +1037,15 @@ window.chooseTeam = async (team) => {
         return;
     }
 
-    /* Hole das reCAPTCHA-Token
-    const captchaToken = grecaptcha.getResponse();
-    if (!captchaToken) {
-        alert("Bitte löse das CAPTCHA, bevor du fortfährst!");
-        return;
-    }
-*/
+    
     console.log(`📢 Sende Team-Wahl: { username: "${username}", team: "${team}" }`);
 
     try {
-        // Sende Team-Wahl und CAPTCHA an Server
+        // Sende Team-Wahl an Server
         socket.emit('chooseTeam', { 
             username, 
             team, 
-            class: gameState.selectedClass /*,
-            captcha: captchaToken*/
+            class: gameState.selectedClass 
         });
 
         // UI wechseln
