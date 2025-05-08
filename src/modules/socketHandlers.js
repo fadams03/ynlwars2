@@ -2,9 +2,10 @@ import { players, projectiles, chatMessages, score, flag, medikits, armors } fro
 import { walls, redSpawn, blueSpawn, classes } from './gameConfig.js';
 import { checkCollision, checkBorderCollision } from './collisionUtils.js';
 
-
-
 export function setupSocketHandlers(io, gameState) {
+    let gameStartTimeout = null;
+    let gameStarted = false;
+
     io.on('connection', (socket) => {
         console.log('Neuer Spieler verbunden:', socket.id);
         socket.emit('chatUpdate', chatMessages);
@@ -37,27 +38,47 @@ export function setupSocketHandlers(io, gameState) {
                 class: playerClass,
                 lastShot: 0,
                 speed: 5,
-                canMove: !isFirstPlayer, // Wenn es nicht der erste Spieler ist, kann er sich sofort bewegen
-                canShoot: !isFirstPlayer, // Wenn es nicht der erste Spieler ist, kann er sofort schießen
-                joinTime: Date.now() // Speichere die Beitrittszeit
+                canMove: false,
+                canShoot: false,
+                joinTime: Date.now()
             };
 
             console.log(`📢 ${username} ist Team ${team.toUpperCase()} als ${classes[playerClass].name} beigetreten!`);
+            console.log(`🔍 Test: canMove ist ${players[socket.id].canMove}`);
             chatMessages.push(`📢 ${username} ist Team ${team.toUpperCase()} als ${classes[playerClass].name} beigetreten!`);
             io.emit('chatUpdate', chatMessages);
             io.emit('state', { players, projectiles, walls, flag, score, redSpawn, blueSpawn, medikits });
 
-            // Wenn es der erste Spieler ist, starte den Countdown
-            if (isFirstPlayer) {
-                setTimeout(() => {
+            // Starte oder setze den Countdown zurück
+            if (isFirstPlayer || gameStartTimeout) {
+                if (gameStartTimeout) {
+                    clearTimeout(gameStartTimeout);
+                }
+                
+                console.log("⏳ Spiel startet in 5 Sekunden ...");
+                io.emit('countdown', 5);
+                
+                let countdown = 5;
+                const countdownInterval = setInterval(() => {
+                    countdown--;
+                    if (countdown > 0) {
+                        io.emit('countdown', countdown);
+                    }
+                }, 1000);
+
+                gameStartTimeout = setTimeout(() => {
+                    clearInterval(countdownInterval);
                     Object.keys(players).forEach(playerId => {
                         if (players[playerId]) {
                             players[playerId].canMove = true;
                             players[playerId].canShoot = true;
                         }
                     });
+                    gameStarted = true;
+                    io.emit('gameStarted');
                     io.emit('state', { players });
-                }, 1000); // 5 Sekunden Countdown
+                    console.log("🎮 Spiel gestartet!");
+                }, 5000);
             }
         });
 
