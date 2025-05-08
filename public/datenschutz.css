@@ -1,0 +1,77 @@
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: radial-gradient(circle at top left, #111, #222 80%);
+    color: #e0e0e0;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    line-height: 1.6;
+    letter-spacing: 0.4px;
+}
+
+.page-wrapper {
+    max-width: 900px;
+    margin: 4rem auto;
+    padding: 2.5rem;
+    background: linear-gradient(145deg, rgba(255,255,255,0.03), rgba(0,0,0,0.2));
+    border-radius: 16px;
+    border: 1px solid rgba(0,255,255,0.2);
+    box-shadow: 0 0 25px rgba(0, 255, 255, 0.05), 0 0 8px rgba(0, 255, 255, 0.15) inset;
+    backdrop-filter: blur(4px);
+}
+
+.page-wrapper h1 {
+    color: #00ffff;
+    font-size: 2.5rem;
+    border-bottom: 2px solid #00ffff;
+    padding-bottom: 0.5rem;
+    margin-bottom: 2rem;
+}
+
+.page-wrapper h2 {
+    color: #00ffcc;
+    font-size: 1.5rem;
+    margin-top: 2rem;
+}
+
+.page-wrapper p {
+    font-size: 1rem;
+    color: #d0d0d0;
+    margin-top: 0.5rem;
+}
+
+.page-wrapper a {
+    color: #00ffff;
+    text-decoration: none;
+    font-weight: bold;
+}
+
+.page-wrapper a:hover {
+    text-decoration: underline;
+    color: #00ccff;
+}
+
+.button-nav {
+    margin-top: 3rem;
+    display: flex;
+    justify-content: space-between;
+}
+
+.button-nav a {
+    background: linear-gradient(135deg, #00ffff, #007777);
+    color: #000;
+    padding: 12px 25px;
+    border-radius: 30px;
+    text-decoration: none;
+    font-weight: bold;
+    transition: all 0.3s ease;
+}
+
+.button-nav a:hover {
+    background: linear-gradient(135deg, #00ccff, #005555);
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0,255,255,0.3);
+}
