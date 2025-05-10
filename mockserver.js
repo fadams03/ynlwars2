@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { Server } from 'socket.io';
 import { createServer } from 'http';
+import { walls, redSpawn, blueSpawn } from './src/modules/gameConfig.js';
 
 class MockServer {
     constructor(port = 3000) {
@@ -13,25 +14,26 @@ class MockServer {
         this.server = createServer(this.app);
         this.io = new Server(this.server, { cors: { origin: "*" } });
 
-        // Erweiterter Spielzustand
+        // Mock gameState
         this.gameState = {
             players: {},
             projectiles: [],
-            walls: [
-                { x: 300, y: 200, width: 10, height: 400 },
-                { x: 1200 - 10, y: 200, width: 10, height: 400 },
-                { x: 700, y: 350, width: 10, height: 100 },
-                { x: 800 - 10, y: 350, width: 10, height: 100 },
-                { x: 700, y: 200, width: 100, height: 10 },
-                { x: 700, y: 600 - 10, width: 100, height: 10 }
-            ],
-            flag: { x: 750, y: 400, carrier: null },
-            score: { red: 0, blue: 0 },
-            redSpawn: { x: 100, y: 400, width: 200, height: 200 },
-            blueSpawn: { x: 1400, y: 400, width: 200, height: 200 },
+            walls: walls,
+            flag: {
+                x: 750,  // Zentriert zwischen den mittleren Hindernissen
+                y: 400,  // Zentriert zwischen den mittleren Hindernissen
+                holder: null
+            },
+            score: {
+                red: 0,
+                blue: 0
+            },
+            redSpawn: redSpawn,
+            blueSpawn: blueSpawn,
             medikits: [],
             armors: [],
-            chatMessages: []
+            speedBoosters: [],
+            lastSpeedBoosterSpawn: 0
         };
 
         this.setupRESTEndpoints();
@@ -42,6 +44,12 @@ class MockServer {
     }
 
     setupRESTEndpoints() {
+        // Automatische Passwort-Akzeptierung
+        this.app.post('/verify-zugangscode', (req, res) => {
+            console.log('🔑 Mock: Zugangscode automatisch akzeptiert');
+            return res.json({ success: true });
+        });
+
         // Spieler-Management
         this.app.post('/api/players', (req, res) => {
             const { username, team } = req.body;
@@ -192,77 +200,116 @@ class MockServer {
 
     setupSocketHandlers() {
         this.io.on('connection', (socket) => {
-            console.log(`👤 Verbunden: ${socket.id}`);
+            console.log('Mock: Neuer Spieler verbunden:', socket.id);
 
-            socket.on('chooseTeam', ({ username, team }) => {
-                const spawnX = team === 'red' ? this.gameState.redSpawn.x + 50 : this.gameState.blueSpawn.x + 50;
-                const spawnY = team === 'red' ? this.gameState.redSpawn.y + 50 : this.gameState.blueSpawn.y + 50;
+            // Initiale Daten senden
+            socket.emit('chatUpdate', []);
+            socket.emit('updateMedikits', this.gameState.medikits);
+            socket.emit('updateArmors', this.gameState.armors);
+            socket.emit('updateSpeedBoosters', this.gameState.speedBoosters);
+
+            // Team-Auswahl
+            socket.on('chooseTeam', (data) => {
+                const { username, team, class: playerClass } = data;
                 
+                if (!username || !team || !playerClass) {
+                    socket.emit('errorMessage', 'Fehlende Daten für Team-Auswahl.');
+                    return;
+                }
+
+                // Klassenspezifische Eigenschaften
+                const classProperties = {
+                    scout: { speed: 7, damage: 1, fireRate: 500 },
+                    soldier: { speed: 5, damage: 2, fireRate: 1000 },
+                    heavy: { speed: 3, damage: 3, fireRate: 1500 }
+                };
+
+                const properties = classProperties[playerClass] || classProperties.soldier;
+
                 this.gameState.players[socket.id] = {
-                    id: socket.id,
-                    username,
+                    x: team === 'red' ? redSpawn.x : blueSpawn.x,
+                    y: team === 'red' ? redSpawn.y : blueSpawn.y,
                     team,
-                    x: spawnX,
-                    y: spawnY,
+                    username,
+                    hasFlag: false,
                     health: 2,
                     armor: 0,
-                    hasFlag: false,
-                    kills: 0,
-                    deaths: 0
+                    class: playerClass,
+                    lastShot: 0,
+                    speed: properties.speed,
+                    damage: properties.damage,
+                    fireRate: properties.fireRate,
+                    canMove: true,
+                    canShoot: true,
+                    joinTime: Date.now()
                 };
-                console.log(`🎮 ${username} (${team}) ist beigetreten. Startposition: x:${spawnX}, y:${spawnY}`);
-                this.broadcastState();
+
+                this.io.emit('state', { 
+                    players: this.gameState.players, 
+                    projectiles: this.gameState.projectiles, 
+                    walls: this.gameState.walls, 
+                    flag: this.gameState.flag, 
+                    score: this.gameState.score 
+                });
             });
 
+            // Bewegung
             socket.on('move', (data) => {
                 const player = this.gameState.players[socket.id];
-                if (!player) return;
+                if (!player || !player.canMove) return;
 
-                const newX = player.x + data.dx;
-                const newY = player.y + data.dy;
+                const newX = player.x + data.dx * player.speed;
+                const newY = player.y + data.dy * player.speed;
 
+                // Prüfe Kollisionen vor der Bewegung
                 if (this.isValidMove(newX, newY)) {
                     player.x = newX;
                     player.y = newY;
-                    console.log(`🎮 ${player.username} (${player.team}) Position: x:${newX}, y:${newY}`);
-                    
-                    // Prüfe Items an aktueller Position
+
+                    // Prüfe Item-Aufnahme
                     this.checkItemPickup(player);
                     
-                    if (player.hasFlag) {
-                        this.gameState.flag.x = newX;
-                        this.gameState.flag.y = newY;
-                    }
-
+                    // Prüfe Flaggenaufnahme
                     this.checkFlagPickup(player);
+                    
+                    // Prüfe Flaggenrückgabe
                     this.checkFlagScore(player);
-                }
 
-                this.broadcastState();
+                    socket.broadcast.emit('playerMoved', { id: socket.id, x: newX, y: newY });
+                }
             });
 
-            socket.on('shoot', ({ angle }) => {
+            // Schießen
+            socket.on('shoot', (data) => {
                 const player = this.gameState.players[socket.id];
-                if (!player) return;
+                if (!player || !player.canShoot) return;
+
+                const now = Date.now();
+                if (now - player.lastShot < player.fireRate) return;
+                player.lastShot = now;
 
                 this.gameState.projectiles.push({
-                    id: `proj_${Date.now()}`,
                     x: player.x,
                     y: player.y,
-                    vx: Math.cos(angle) * 5,
-                    vy: Math.sin(angle) * 5,
-                    owner: socket.id
+                    vx: Math.cos(data.angle) * 10,
+                    vy: Math.sin(data.angle) * 10,
+                    owner: socket.id,
+                    damage: player.damage
                 });
 
-                this.broadcastState();
+                this.io.emit('newProjectile', this.gameState.projectiles);
             });
 
+            // Trennung
             socket.on('disconnect', () => {
-                if (this.gameState.players[socket.id]?.hasFlag) {
-                    this.gameState.flag = { x: 750, y: 400, carrier: null };
+                if (this.gameState.players[socket.id]) {
+                    delete this.gameState.players[socket.id];
+                    this.io.emit('state', { 
+                        players: this.gameState.players, 
+                        flag: this.gameState.flag, 
+                        score: this.gameState.score 
+                    });
                 }
-                delete this.gameState.players[socket.id];
-                this.broadcastState();
             });
         });
     }
@@ -322,20 +369,31 @@ class MockServer {
 
     // Hilfsmethoden
     isValidMove(x, y) {
-        return !this.checkWallCollision(x, y) && this.checkBorderCollision(x, y);
+        // Prüfe Grenzen
+        if (!this.checkBorderCollision(x, y)) return false;
+
+        // Prüfe Wandkollisionen
+        if (this.checkWallCollision(x, y)) return false;
+
+        return true;
     }
 
     checkWallCollision(x, y) {
+        const playerRadius = 15; // Spieler-Hitbox-Radius
         return this.gameState.walls.some(wall =>
-            x - 10 < wall.x + wall.width &&
-            x + 10 > wall.x &&
-            y - 10 < wall.y + wall.height &&
-            y + 10 > wall.y
+            x - playerRadius < wall.x + wall.width &&
+            x + playerRadius > wall.x &&
+            y - playerRadius < wall.y + wall.height &&
+            y + playerRadius > wall.y
         );
     }
 
     checkBorderCollision(x, y) {
-        return x >= 10 && x <= 1490 && y >= 10 && y <= 790;
+        const playerRadius = 15;
+        return x >= playerRadius && 
+               x <= 1500 - playerRadius && 
+               y >= playerRadius && 
+               y <= 800 - playerRadius;
     }
 
     checkPlayerHit(projectile, player) {
@@ -344,12 +402,14 @@ class MockServer {
 
     handlePlayerHit(player, attackerId) {
         const attacker = this.gameState.players[attackerId];
+        const projectile = this.gameState.projectiles.find(p => p.owner === attackerId);
+        const damage = projectile ? projectile.damage : 1;
         
         if (player.armor > 0) {
-            player.armor--;
+            player.armor = Math.max(0, player.armor - damage);
             console.log(`🎮 ${player.username} (${player.team}) wurde von ${attacker?.username || 'Unbekannt'} getroffen. Rüstung: ${player.armor}`);
         } else {
-            player.health--;
+            player.health = Math.max(0, player.health - damage);
             console.log(`🎮 ${player.username} (${player.team}) wurde von ${attacker?.username || 'Unbekannt'} getroffen. Leben: ${player.health}`);
         }
 
@@ -369,7 +429,8 @@ class MockServer {
             this.gameState.flag = {
                 x: player.x,
                 y: player.y,
-                carrier: null
+                carrier: null,
+                visible: true // Flagge wieder sichtbar machen
             };
             console.log(`🎮 ${player.username} (${player.team}) hat die Flagge fallen gelassen!`);
         }
@@ -386,32 +447,54 @@ class MockServer {
     }
 
     checkFlagPickup(player) {
+        const pickupRadius = 20;
+        
         if (!this.gameState.flag.carrier &&
-            Math.abs(player.x - this.gameState.flag.x) < 20 &&
-            Math.abs(player.y - this.gameState.flag.y) < 20) {
+            Math.abs(player.x - this.gameState.flag.x) < pickupRadius &&
+            Math.abs(player.y - this.gameState.flag.y) < pickupRadius) {
             
-            player.hasFlag = true;
-            this.gameState.flag.carrier = player.id;
-            this.gameState.flag.x = player.x;
-            this.gameState.flag.y = player.y;
+            // Prüfe, ob Spieler die gegnerische Flagge aufnimmt
+            const flagTeam = this.gameState.flag.x < 750 ? 'blue' : 'red';
+            if (player.team !== flagTeam) {
+                player.hasFlag = true;
+                this.gameState.flag.carrier = player.id;
+                this.gameState.flag.x = player.x;
+                this.gameState.flag.y = player.y;
+                this.gameState.flag.visible = false; // Flagge unsichtbar machen
 
-            console.log(`🎮 ${player.username} (${player.team}) hat die Flagge aufgenommen!`);
+                console.log(`🎮 ${player.username} (${player.team}) hat die Flagge aufgenommen!`);
+                this.broadcastState();
+            }
         }
     }
 
     checkFlagScore(player) {
+        if (!player.hasFlag) return;
+
         const spawn = player.team === 'red' ? this.gameState.redSpawn : this.gameState.blueSpawn;
+        const spawnArea = {
+            x: spawn.x,
+            y: spawn.y,
+            width: 200,
+            height: 200
+        };
         
-        if (player.hasFlag &&
-            player.x > spawn.x &&
-            player.x < spawn.x + spawn.width &&
-            player.y > spawn.y &&
-            player.y < spawn.y + spawn.height) {
+        if (player.x >= spawnArea.x &&
+            player.x <= spawnArea.x + spawnArea.width &&
+            player.y >= spawnArea.y &&
+            player.y <= spawnArea.y + spawnArea.height) {
             
             console.log(`🎮 ${player.username} (${player.team}) hat die Flagge zurückgebracht!`);
             this.gameState.score[player.team]++;
             player.hasFlag = false;
-            this.gameState.flag = { x: 750, y: 400, carrier: null };
+            
+            // Flagge zurück zur Mitte
+            this.gameState.flag = { 
+                x: 750, 
+                y: 400, 
+                carrier: null,
+                visible: true // Flagge wieder sichtbar machen
+            };
 
             console.log(`🎮 Neuer Punktestand - Rot: ${this.gameState.score.red}, Blau: ${this.gameState.score.blue}`);
 
@@ -419,6 +502,8 @@ class MockServer {
                 console.log(`🎮 Team ${player.team.toUpperCase()} hat das Spiel gewonnen!`);
                 this.handleGameOver(player.team);
             }
+
+            this.broadcastState();
         }
     }
 
@@ -440,8 +525,35 @@ class MockServer {
             { x: 750, y: 600 }    // Unten Mitte
         ];
 
-        // Wähle zufälligen Spawn-Punkt
-        const spawnPoint = spawnPoints[Math.floor(Math.random() * spawnPoints.length)];
+        // Prüfe, ob ein Spawn-Punkt frei ist
+        const isPositionOccupied = (x, y) => {
+            const occupiedRadius = 30; // Mindestabstand zwischen Items
+            
+            // Prüfe Kollision mit anderen Items
+            const allItems = [...this.gameState.medikits, ...this.gameState.armors];
+            return allItems.some(item => 
+                Math.abs(item.x - x) < occupiedRadius && 
+                Math.abs(item.y - y) < occupiedRadius
+            );
+        };
+
+        // Finde einen freien Spawn-Punkt
+        let spawnPoint;
+        let attempts = 0;
+        const maxAttempts = 10;
+
+        do {
+            spawnPoint = spawnPoints[Math.floor(Math.random() * spawnPoints.length)];
+            attempts++;
+        } while (isPositionOccupied(spawnPoint.x, spawnPoint.y) && attempts < maxAttempts);
+
+        // Wenn kein freier Punkt gefunden wurde, wähle einen zufälligen Punkt
+        if (attempts >= maxAttempts) {
+            spawnPoint = {
+                x: Math.random() * 1200 + 150, // Zwischen 150 und 1350
+                y: Math.random() * 600 + 100   // Zwischen 100 und 700
+            };
+        }
         
         const item = {
             id: `item_${Date.now()}`,
@@ -465,7 +577,12 @@ class MockServer {
 
     resetGame() {
         this.gameState.score = { red: 0, blue: 0 };
-        this.gameState.flag = { x: 750, y: 400, carrier: null };
+        this.gameState.flag = { 
+            x: 750, 
+            y: 400, 
+            carrier: null,
+            visible: true // Flagge sichtbar beim Spielstart
+        };
         this.gameState.projectiles = [];
         this.gameState.medikits = [];
         this.gameState.armors = [];
@@ -488,20 +605,46 @@ class MockServer {
 
     // Neue Methode für Item-Kollisionserkennung
     checkItemPickup(player) {
+        const pickupRadius = 20;
+
         // Prüfe Medikits
-        this.gameState.medikits.forEach(item => {
-            if (Math.abs(player.x - item.x) < 20 && Math.abs(player.y - item.y) < 20) {
-                console.log(`🎮 ${player.username} (${player.team}) steht auf einem Medikit. Leben: ${player.health}/2`);
+        this.gameState.medikits = this.gameState.medikits.filter(item => {
+            if (item.active && 
+                Math.abs(player.x - item.x) < pickupRadius && 
+                Math.abs(player.y - item.y) < pickupRadius) {
+                
+                if (player.health < 2) {
+                    player.health = Math.min(player.health + 1, 2);
+                    console.log(`🎮 ${player.username} (${player.team}) hat ein Medikit aufgenommen. Leben: ${player.health}`);
+                    
+                    // Neues Medikit nach 5 Sekunden spawnen
+                    setTimeout(() => this.spawnItem('medikit'), 5000);
+                    return false;
+                }
             }
+            return true;
         });
 
         // Prüfe Rüstungen
-        this.gameState.armors.forEach(item => {
-            if (Math.abs(player.x - item.x) < 20 && Math.abs(player.y - item.y) < 20) {
-                console.log(`🎮 ${player.username} (${player.team}) steht auf einer Rüstung. Rüstung: ${player.armor}/2`);
+        this.gameState.armors = this.gameState.armors.filter(item => {
+            if (item.active && 
+                Math.abs(player.x - item.x) < pickupRadius && 
+                Math.abs(player.y - item.y) < pickupRadius) {
+                
+                if (player.armor < 2) {
+                    player.armor = Math.min(player.armor + 1, 2);
+                    console.log(`🎮 ${player.username} (${player.team}) hat eine Rüstung aufgenommen. Rüstung: ${player.armor}`);
+                    
+                    // Neue Rüstung nach 5 Sekunden spawnen
+                    setTimeout(() => this.spawnItem('armor'), 5000);
+                    return false;
+                }
             }
+            return true;
         });
+
+        this.broadcastState();
     }
 }
 
-new MockServer();
+const mockServer = new MockServer(3000);
