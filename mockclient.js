@@ -2,6 +2,7 @@ import { io } from 'socket.io-client';
 
 class MockClient {
     constructor(url = 'http://localhost:8200') {
+        console.log('Initialisiere MockClient...');
         this.socket = io(url);
         this.gameState = {
             players: {},
@@ -18,8 +19,6 @@ class MockClient {
             connected: false,
             ready: false
         };
-        this.lastLog = '';
-        this.movementSpeed = 5;
         this.setupListeners();
     }
 
@@ -35,210 +34,257 @@ class MockClient {
         });
 
         this.socket.on('state', state => {
-            // Prüfe, ob state und state.players existieren
-            if (!state || !state.players) {
-                return;
-            }
-
-            const oldHealth = this.gameState.players[this.socket.id]?.health;
-            const oldArmor = this.gameState.players[this.socket.id]?.armor;
-            const oldHasFlag = this.gameState.players[this.socket.id]?.hasFlag;
-            const oldScore = this.gameState.score;
+            if (!state || !state.players) return;
             
             Object.assign(this.gameState, state);
             
             if (this.socket.id && this.socket.id in state.players) {
-                this.gameState.playerX = state.players[this.socket.id].x;
-                this.gameState.playerY = state.players[this.socket.id].y;
                 const player = state.players[this.socket.id];
-
+                this.gameState.playerX = player.x;
+                this.gameState.playerY = player.y;
+                
                 if (!this.gameState.ready) {
                     console.log('✅ Spieler initialisiert');
                     this.gameState.ready = true;
-                }
-                
-                if (oldHealth !== player.health) {
-                    console.log(`❤️ Leben: ${player.health}`);
-                }
-                if (oldArmor !== player.armor) {
-                    console.log(`🛡️ Rüstung: ${player.armor}`);
-                }
-                if (oldHasFlag !== player.hasFlag) {
-                    console.log(player.hasFlag ? '🚩 Flagge aufgenommen!' : '🚩 Flagge verloren!');
-                }
-                if (state.score && (oldScore?.red !== state.score.red || oldScore?.blue !== state.score.blue)) {
-                    console.log(`📊 Punktestand - Rot: ${state.score?.red || 0} | Blau: ${state.score?.blue || 0}`);
                 }
             }
         });
 
         this.socket.on('chatUpdate', messages => {
             const lastMsg = messages[messages.length - 1];
-            if (lastMsg !== this.lastLog) {
-                console.log('💬', lastMsg);
-                this.lastLog = lastMsg;
-            }
-        });
-
-        this.socket.on('updateMedikits', medikits => this.gameState.medikits = medikits);
-        this.socket.on('updateArmors', armors => this.gameState.armors = armors);
-        this.socket.on('gameOver', winner => console.log(`\n🏆 Spiel vorbei! Team ${winner} hat gewonnen!\n`));
-    }
-
-    async waitForReady() {
-        return new Promise((resolve) => {
-            if (this.gameState.ready) resolve();
-            else {
-                const interval = setInterval(() => {
-                    if (this.gameState.ready) {
-                        clearInterval(interval);
-                        resolve();
-                    }
-                }, 100);
-            }
+            console.log('💬', lastMsg);
         });
     }
 
     checkWallCollision(x, y) {
-        return this.gameState.walls.some(wall =>
-            x - 10 < wall.x + wall.width &&
-            x + 10 > wall.x &&
-            y - 10 < wall.y + wall.height &&
-            y + 10 > wall.y
-        );
+        const wallSize = 50;
+        const playerSize = 30;
+        
+        for (const wall of this.gameState.walls) {
+            if (x + playerSize > wall.x && 
+                x - playerSize < wall.x + wallSize && 
+                y + playerSize > wall.y && 
+                y - playerSize < wall.y + wallSize) {
+                return true;
+            }
+        }
+        return false;
     }
 
-    async findPath(startX, startY, targetX, targetY) {
-        const openSet = new Set();
-        const closedSet = new Set();
-        const cameFrom = new Map();
-        const gScore = new Map();
-        const fScore = new Map();
-        
-        const startKey = `${startX},${startY}`;
-        const targetKey = `${targetX},${targetY}`;
-        
-        openSet.add(startKey);
-        gScore.set(startKey, 0);
-        fScore.set(startKey, this.heuristic(startX, startY, targetX, targetY));
-        
-        let current = null;
-        
-        while (openSet.size > 0) {
-            // Finde den Knoten mit dem niedrigsten fScore
-            let lowestFScore = Infinity;
-            for (const key of openSet) {
-                const score = fScore.get(key) || Infinity;
-                if (score < lowestFScore) {
-                    lowestFScore = score;
-                    current = key;
+    // Hilfsfunktion: Karte in ein Grid umwandeln
+    buildGrid(cellSize = 10) {
+        // Bestimme Spielfeldgröße
+        let maxX = 1600; // Annahme: Spielfeldbreite
+        let maxY = 900;  // Annahme: Spielfeldhöhe
+        let cols = Math.ceil(maxX / cellSize);
+        let rows = Math.ceil(maxY / cellSize);
+        // Grid initialisieren
+        let grid = Array.from({ length: cols }, () => Array(rows).fill(0));
+        // Wände eintragen
+        for (const wall of this.gameState.walls) {
+            let wx = Math.floor(wall.x / cellSize);
+            let wy = Math.floor(wall.y / cellSize);
+            let wsize = Math.ceil(50 / cellSize); // Wandgröße 50x50
+            for (let dx = 0; dx < wsize; dx++) {
+                for (let dy = 0; dy < wsize; dy++) {
+                    if (wx + dx < cols && wy + dy < rows) {
+                        grid[wx + dx][wy + dy] = 1;
+                    }
                 }
             }
-            
-            if (!current) break;
-            
-            if (current === targetKey) {
-                return this.reconstructPath(cameFrom, current);
-            }
-            
-            openSet.delete(current);
-            closedSet.add(current);
-            
-            const [currentX, currentY] = current.split(',').map(Number);
-            
-            // Prüfe alle 8 Richtungen
-            const directions = [
-                { dx: this.movementSpeed, dy: 0 },        // Rechts
-                { dx: -this.movementSpeed, dy: 0 },       // Links
-                { dx: 0, dy: this.movementSpeed },        // Unten
-                { dx: 0, dy: -this.movementSpeed },       // Oben
-                { dx: this.movementSpeed, dy: this.movementSpeed },    // Rechts-Unten
-                { dx: -this.movementSpeed, dy: this.movementSpeed },   // Links-Unten
-                { dx: this.movementSpeed, dy: -this.movementSpeed },   // Rechts-Oben
-                { dx: -this.movementSpeed, dy: -this.movementSpeed }   // Links-Oben
-            ];
-            
-            for (const dir of directions) {
-                const neighborX = currentX + dir.dx;
-                const neighborY = currentY + dir.dy;
-                const neighborKey = `${neighborX},${neighborY}`;
-                
-                // Überspringe, wenn außerhalb der Karte oder in Hindernis
-                if (this.checkWallCollision(neighborX, neighborY) || closedSet.has(neighborKey)) {
-                    continue;
-                }
-                
-                const tentativeGScore = (gScore.get(current) || 0) + 
-                    this.distance(currentX, currentY, neighborX, neighborY);
-                
-                if (!openSet.has(neighborKey)) {
-                    openSet.add(neighborKey);
-                } else if (tentativeGScore >= (gScore.get(neighborKey) || Infinity)) {
-                    continue;
-                }
-                
-                cameFrom.set(neighborKey, current);
-                gScore.set(neighborKey, tentativeGScore);
-                fScore.set(neighborKey, tentativeGScore + 
-                    this.heuristic(neighborX, neighborY, targetX, targetY));
-            }
         }
-        
-        // Wenn kein Pfad gefunden wurde, versuche einen direkten Weg
-        return this.findDirectPath(startX, startY, targetX, targetY);
-    }
-    
-    heuristic(x1, y1, x2, y2) {
-        // Manhattan-Distanz für bessere Performance
-        return Math.abs(x1 - x2) + Math.abs(y1 - y2);
-    }
-    
-    distance(x1, y1, x2, y2) {
-        // Euklidische Distanz für genauere Pfadfindung
-        return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
-    }
-    
-    reconstructPath(cameFrom, current) {
-        const path = [];
-        while (current) {
-            const [x, y] = current.split(',').map(Number);
-            path.unshift({ x, y });
-            current = cameFrom.get(current);
-        }
-        return path;
-    }
-    
-    async findDirectPath(startX, startY, targetX, targetY) {
-        const path = [];
-        const dx = targetX - startX;
-        const dy = targetY - startY;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        const steps = Math.ceil(distance / this.movementSpeed);
-        
-        for (let i = 0; i < steps; i++) {
-            const progress = i / steps;
-            const nextX = startX + dx * progress;
-            const nextY = startY + dy * progress;
-            
-            if (!this.checkWallCollision(nextX, nextY)) {
-                path.push({ x: nextX, y: nextY });
-            }
-        }
-        
-        return path;
+        return { grid, cellSize, cols, rows };
     }
 
-    async moveToPosition(x, y) {
-        const startX = this.gameState.playerX;
-        const startY = this.gameState.playerY;
-        
-        // Finde optimalen Pfad
-        const path = await this.findPath(startX, startY, x, y);
-        
-        // Bewege entlang des Pfades
-        for (const point of path) {
-            this.move(point.x - this.gameState.playerX, point.y - this.gameState.playerY);
-            await new Promise(resolve => setTimeout(resolve, 50));
+    // Hilfsfunktion: A*-Pathfinding
+    findPath(startX, startY, endX, endY) {
+        const { grid, cellSize, cols, rows } = this.buildGrid();
+        const start = { x: Math.floor(startX / cellSize), y: Math.floor(startY / cellSize) };
+        const end = { x: Math.floor(endX / cellSize), y: Math.floor(endY / cellSize) };
+        function heuristic(a, b) { return Math.abs(a.x - b.x) + Math.abs(a.y - b.y); }
+        let open = [ { ...start, g: 0, f: heuristic(start, end), parent: null } ];
+        let closed = new Set();
+        let key = (n) => `${n.x},${n.y}`;
+        while (open.length > 0) {
+            open.sort((a, b) => a.f - b.f);
+            let current = open.shift();
+            if (current.x === end.x && current.y === end.y) {
+                // Pfad zurückverfolgen
+                let path = [];
+                while (current) {
+                    path.push(current);
+                    current = current.parent;
+                }
+                return path.reverse();
+            }
+            closed.add(key(current));
+            for (const dir of [ [1,0], [-1,0], [0,1], [0,-1] ]) {
+                let nx = current.x + dir[0];
+                let ny = current.y + dir[1];
+                if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
+                if (grid[nx][ny] === 1) continue;
+                let neighbor = { x: nx, y: ny };
+                if (closed.has(key(neighbor))) continue;
+                let g = current.g + 1;
+                let f = g + heuristic(neighbor, end);
+                let existing = open.find(n => n.x === nx && n.y === ny);
+                if (!existing || g < existing.g) {
+                    open.push({ x: nx, y: ny, g, f, parent: current });
+                }
+            }
+        }
+        return null; // Kein Pfad gefunden
+    }
+
+    // Kollisionsprüfung exakt auf Grid-Basis
+    checkGridCollision(grid, x, y, cellSize) {
+        const gx = Math.floor(x / cellSize);
+        const gy = Math.floor(y / cellSize);
+        if (gx < 0 || gy < 0 || gx >= grid.length || gy >= grid[0].length) return true;
+        return grid[gx][gy] === 1;
+    }
+
+    async moveToPosition(targetX, targetY) {
+        // Pathfinding mit A*
+        const { grid, cellSize } = this.buildGrid();
+        const path = this.findPath(this.gameState.playerX, this.gameState.playerY, targetX, targetY);
+        if (!path || path.length < 2) {
+            this.sendMessage('Kein Weg zum Ziel gefunden!');
+            return;
+        }
+        for (let i = 1; i < path.length; i++) {
+            const cell = path[i];
+            const nextX = cell.x * cellSize + cellSize / 2;
+            const nextY = cell.y * cellSize + cellSize / 2;
+            // Kollisionsprüfung exakt auf Grid-Basis
+            if (this.checkGridCollision(grid, nextX, nextY, cellSize)) {
+                this.sendMessage(`Hindernis erkannt bei (${nextX.toFixed(0)}, ${nextY.toFixed(0)})! Kann nicht weiter.`);
+                break;
+            }
+            const dx = nextX - this.gameState.playerX;
+            const dy = nextY - this.gameState.playerY;
+            this.move(dx, dy);
+            // Warte auf tatsächliche Positionsänderung (Polling)
+            let tries = 0;
+            while (tries++ < 20) {
+                await new Promise(resolve => setTimeout(resolve, 20));
+                const px = this.gameState.playerX;
+                const py = this.gameState.playerY;
+                if (Math.abs(px - nextX) < cellSize / 2 && Math.abs(py - nextY) < cellSize / 2) {
+                    break;
+                }
+            }
+        }
+        // Finale Bewegung zum Ziel
+        const finalDx = targetX - this.gameState.playerX;
+        const finalDy = targetY - this.gameState.playerY;
+        if (Math.abs(finalDx) > 0 || Math.abs(finalDy) > 0) {
+            if (!this.checkGridCollision(grid, targetX, targetY, cellSize)) {
+                this.move(finalDx, finalDy);
+            } else {
+                this.sendMessage(`Hindernis erkannt bei (${targetX.toFixed(0)}, ${targetY.toFixed(0)})! Ziel nicht erreichbar.`);
+            }
+        }
+        await new Promise(resolve => setTimeout(resolve, 200));
+    }
+
+    async runTests() {
+        try {
+            console.log('\n🧪 Starte Spieltests...\n');
+
+            // 1. Verbindung und Spielstart
+            await this.joinGame('TestBot', 'red', 'classic');
+            console.log('⏳ Warte 5 Sekunden, dann beginne mit den Tests...');
+            this.sendMessage('TestBot ist bereit!');
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            this.sendMessage('Starte jetzt mit den Tests!');
+
+            // 2. Schießtest in alle Richtungen
+            console.log('\n🔫 Teste Schießen...');
+            this.sendMessage('Starte Schießtests...');
+            
+            const angles = [0, Math.PI/2, Math.PI, Math.PI*1.5];
+            for (const angle of angles) {
+                console.log(`Schieße in Winkel ${angle}...`);
+                this.sendMessage(`Schieße in Winkel ${angle}...`);
+                this.shoot(angle);
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+
+            // 3. Items aufsammeln
+            console.log('\n🎯 Starte Item-Sammlung...');
+            this.sendMessage('Suche nach Items...');
+            
+            // Medikit
+            const medikit = this.gameState.medikits.find(m => m.active);
+            if (medikit) {
+                console.log(`💊 Suche Medikit bei (${medikit.x}, ${medikit.y})...`);
+                this.sendMessage(`Bewege mich zum Medikit bei (${medikit.x}, ${medikit.y})`);
+                await this.moveToPosition(medikit.x, medikit.y);
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+
+            // Rüstung
+            const armor = this.gameState.armors.find(a => a.active);
+            if (armor) {
+                console.log(`🛡️ Suche Rüstung bei (${armor.x}, ${armor.y})...`);
+                this.sendMessage(`Bewege mich zur Rüstung bei (${armor.x}, ${armor.y})`);
+                await this.moveToPosition(armor.x, armor.y);
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+
+            // Speedbooster
+            const booster = this.gameState.speedBoosters && this.gameState.speedBoosters.find(b => b.active);
+            if (booster) {
+                console.log(`⚡ Suche Speedbooster bei (${booster.x}, ${booster.y})...`);
+                this.sendMessage(`Bewege mich zum Speedbooster bei (${booster.x}, ${booster.y})`);
+                await this.moveToPosition(booster.x, booster.y);
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+
+            // 4. Flaggen-Runs
+            console.log('\n🚩 Starte Flaggen-Runs...');
+            this.sendMessage('Beginne Flaggen-Runs!');
+            
+            for (let i = 0; i < 3; i++) {
+                console.log(`\n🏃 Flaggen-Run ${i + 1} von 3`);
+                this.sendMessage(`Starte Flaggen-Run ${i + 1} von 3`);
+                
+                // Warte bis Flagge verfügbar
+                await this.waitForFlagReset();
+                console.log(`🚩 Flagge ist verfügbar bei (${this.gameState.flag.x}, ${this.gameState.flag.y})`);
+                this.sendMessage(`Flagge gefunden! Bewege mich zu (${this.gameState.flag.x}, ${this.gameState.flag.y})`);
+                
+                // Bewege zur Flagge
+                await this.moveToPosition(this.gameState.flag.x, this.gameState.flag.y);
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                // Prüfe ob Flagge aufgenommen wurde
+                if (this.gameState.players[this.socket.id]?.hasFlag) {
+                    console.log('✅ Flagge aufgenommen! Bewege zur Basis...');
+                    this.sendMessage('Flagge aufgenommen! Bewege zur Basis...');
+                    
+                    // Bewege zur Basis
+                    const baseX = this.gameState.team === 'red' ? 100 : 1400;
+                    await this.moveToPosition(baseX, 400);
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    
+                    console.log(`✅ Flaggen-Run ${i + 1} abgeschlossen`);
+                    this.sendMessage(`Flaggen-Run ${i + 1} erfolgreich abgeschlossen!`);
+                } else {
+                    console.log('❌ Konnte Flagge nicht aufnehmen');
+                    this.sendMessage('Konnte Flagge nicht aufnehmen, versuche es erneut...');
+                }
+                
+                await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+
+            console.log('\n🎉 Tests erfolgreich abgeschlossen!\n');
+            this.sendMessage('Alle Tests erfolgreich abgeschlossen! 🎉');
+
+        } catch (error) {
+            console.error('❌ Testfehler:', error);
+            this.sendMessage(`Fehler aufgetreten: ${error.message}`);
         }
     }
 
@@ -255,33 +301,6 @@ class MockClient {
         });
     }
 
-    async pickupFlag() {
-        console.log(`🚩 Versuche Flagge bei (${this.gameState.flag.x}, ${this.gameState.flag.y}) aufzuheben...`);
-        
-        // Warte auf Flaggen-Reset
-        await this.waitForFlagReset();
-        
-        // Bewege zur Flaggenposition
-        await this.moveToPosition(this.gameState.flag.x, this.gameState.flag.y);
-        
-        // Kleine Bewegung um die Flagge
-        for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 2) {
-            this.move(Math.cos(angle) * 5, Math.sin(angle) * 5);
-            await new Promise(resolve => setTimeout(resolve, 100));
-        }
-        
-        // Warte auf Flaggenaufnahme
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        if (this.gameState.players[this.socket.id]?.hasFlag) {
-            console.log('✅ Flagge erfolgreich aufgenommen!');
-            return true;
-        }
-        
-        console.log('❌ Konnte Flagge nicht aufnehmen');
-        return false;
-    }
-
     move(dx, dy) {
         if (!this.gameState.connected) {
             console.log('❌ Keine Verbindung zum Server');
@@ -296,112 +315,11 @@ class MockClient {
     }
 
     sendMessage(message) {
-        if (!this.gameState.connected) return;
+        if (!this.gameState.connected) {
+            console.log('❌ Keine Verbindung zum Server');
+            return;
+        }
         this.socket.emit('chatMessage', message);
-    }
-
-    async pickupItem(item, type) {
-        console.log(`🎯 Versuche ${type} bei (${item.x}, ${item.y}) aufzusammeln...`);
-        
-        // Bewege zur Item-Position
-        await this.moveToPosition(item.x, item.y);
-        
-        // Kleine Bewegung um das Item
-        for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 2) {
-            this.move(Math.cos(angle) * 5, Math.sin(angle) * 5);
-            await new Promise(resolve => setTimeout(resolve, 100));
-        }
-        
-        // Prüfe, ob das Item aufgesammelt wurde
-        if (!this.gameState[type].find(i => i.x === item.x && i.y === item.y && i.active)) {
-            console.log(`✅ ${type} erfolgreich aufgesammelt!`);
-            return true;
-        }
-        
-        console.log(`❌ Konnte ${type} nicht aufsammeln`);
-        return false;
-    }
-
-    async runTests() {
-        try {
-            console.log('\n🧪 Starte Spieltests...\n');
-
-            // 1. Klasse auswählen und Team beitreten
-            await this.joinGame('TestBot', 'red', 'classic');
-            await this.waitForReady();
-            console.log('🎮 Spiel bereit');
-
-            // 2. Bewegungstest
-            console.log('\n🏃 Teste Bewegungen...');
-            const movements = [
-                { dx: 30, dy: 0 }, { dx: 0, dy: 30 },
-                { dx: -30, dy: 0 }, { dx: 0, dy: -30 }
-            ];
-            
-            for (const move of movements) {
-                this.move(move.dx, move.dy);
-                await new Promise(resolve => setTimeout(resolve, 300));
-            }
-
-            // 3. Schießtest
-            console.log('\n🔫 Teste Schießen...');
-            for (const angle of [0, Math.PI/2, Math.PI, Math.PI*1.5]) {
-                this.shoot(angle);
-                await new Promise(resolve => setTimeout(resolve, 300));
-            }
-
-            // 4. Chat
-            console.log('\n💬 Teste Chat...');
-            this.sendMessage('Hallo, ich bin ein TestBot! 🤖');
-            await new Promise(resolve => setTimeout(resolve, 500));
-
-            // 5. Items und Flagge
-            console.log('\n🎯 Starte Item-Tests...');
-            
-            // Ein Medikit
-            const medikit = this.gameState.medikits.find(m => m.active);
-            if (medikit) {
-                await this.pickupItem(medikit, 'medikits');
-            }
-
-            // Eine Rüstung
-            const armor = this.gameState.armors.find(a => a.active);
-            if (armor) {
-                await this.pickupItem(armor, 'armors');
-            }
-
-            // Flagge
-            console.log('\n🚩 Starte Flaggen-Tests...');
-            for (let i = 0; i < 3; i++) {
-                if (await this.pickupFlag()) {
-                    console.log('🚩 Flagge aufgenommen! Bewege zur Basis...');
-                    const spawnX = this.gameState.team === 'red' ? 100 : 1400;
-                    await this.moveToPosition(spawnX, 400);
-                    
-                    // Warte auf Punkt
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    
-                    // Kleine Bewegung in der Basis
-                    for (let j = 0; j < 3; j++) {
-                        this.move(0, 10);
-                        await new Promise(resolve => setTimeout(resolve, 100));
-                        this.move(0, -10);
-                        await new Promise(resolve => setTimeout(resolve, 100));
-                    }
-                    
-                    console.log(`✅ Flaggen-Run ${i + 1} abgeschlossen`);
-                }
-                
-                // Warte auf Flaggen-Reset
-                await this.waitForFlagReset();
-                await new Promise(resolve => setTimeout(resolve, 1000));
-            }
-
-            console.log('\n🎉 Tests erfolgreich abgeschlossen!\n');
-
-        } catch (error) {
-            console.error('❌ Testfehler:', error);
-        }
     }
 
     async joinGame(username, team, playerClass) {
@@ -434,7 +352,7 @@ async function runMockTest() {
     
     setTimeout(() => {
         client.disconnect();
-    }, 20000);
+    }, 30000);
 }
 
 runMockTest(); 
