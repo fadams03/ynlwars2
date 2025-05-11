@@ -50,7 +50,7 @@ const terrainPatterns = {
 
 // Erstelle Terrain-Texturen
 function createTerrainPatterns() {
-    // Gras-Textur (optimiert)
+    // Gras-Textur
     const grassCanvas = document.createElement('canvas');
     grassCanvas.width = 40;
     grassCanvas.height = 40;
@@ -149,7 +149,7 @@ const render = {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
     },
 
-    // Verbesserte Rechteck-Funktion mit optionaler Textur und Schatten
+    // Rechteck-Funktion mit optionaler Textur und Schatten
     rect(x, y, w, h, color, pattern = null, withShadow = false) {
         ctx.save();
         if (withShadow) {
@@ -167,7 +167,7 @@ const render = {
         ctx.restore();
     },
 
-    // Neue Funktion für Krater und Beschädigungen
+    // Funktion für Krater und Beschädigungen
     drawCrater(x, y, size) {
         ctx.save();
         ctx.beginPath();
@@ -177,7 +177,7 @@ const render = {
         ctx.restore();
     },
 
-    // Neue Funktion für Sandsäcke
+    // Funktion für Sandsäcke
     drawSandbag(x, y, width, height) {
         ctx.save();
         ctx.fillStyle = '#8B7355';
@@ -199,7 +199,7 @@ const render = {
         ctx.restore();
     },
 
-    // Neue Funktion für Stacheldraht
+    // Funktion für Stacheldraht
     drawBarbed(x, y, width) {
         ctx.save();
         ctx.strokeStyle = '#808080';
@@ -223,7 +223,7 @@ const render = {
         ctx.restore();
     },
 
-    // Neue Funktion für die Basis
+    // Funktion für die Basis
     drawBase(x, y, size, team) {
         ctx.save();
         
@@ -254,7 +254,7 @@ const render = {
         ctx.restore();
     },
 
-    // Neue Funktion für Dekoration
+    // Funktion für Dekoration
     drawDecoration(x, y, type) {
         ctx.save();
         switch(type) {
@@ -285,7 +285,7 @@ const render = {
         ctx.fillText(text, x, y);
     },
 
-    // Neue Render-Funktionen mit direkter Canvas-Zeichnung
+    // Render-Funktionen mit direkter Canvas-Zeichnung
     drawWarrior(x, y, team, hasFlag) {
         ctx.save();
         ctx.translate(x, y);
@@ -738,7 +738,7 @@ if (gameState.keys.d || gameState.keys.D) direction = 'right';
                 break;
                 
             case 'shotgun':
-                // Verbessertes Shotgun-Projektil
+                // Shotgun-Projektil
                 ctx.fillStyle = '#ffa500';
                 ctx.beginPath();
                 ctx.arc(0, 0, 6, 0, Math.PI * 2);
@@ -762,7 +762,7 @@ if (gameState.keys.d || gameState.keys.D) direction = 'right';
                 break;
                 
             default:
-                // Verbessertes klassisches Projektil
+                // klassisches Projektil
                 ctx.fillStyle = '#4444ff';
                 ctx.beginPath();
                 ctx.arc(0, 0, 4, 0, Math.PI * 2);
@@ -974,7 +974,7 @@ const handlers = {
         if (document.activeElement === chatInput) return;
 
         if (["w", "a", "s", "d", "W", "A", "S", "D"].includes(e.key)) {
-            gameState.keys[e.key.toLowerCase()] = true; // Normalize to lowercase
+            gameState.keys[e.key.toLowerCase()] = true; 
         } else if (e.key === " ") {
             this.shoot();
         }
@@ -982,7 +982,7 @@ const handlers = {
 
     keyUp(e) {
         if (["w", "a", "s", "d", "W", "A", "S", "D"].includes(e.key)) {
-            gameState.keys[e.key.toLowerCase()] = false; // Normalize to lowercase
+            gameState.keys[e.key.toLowerCase()] = false;
         }
     },
 
@@ -1013,7 +1013,7 @@ function gameLoop() {
         handlers.updatePlayerDirection();
         
         Object.entries(gameState.keys).forEach(([key, pressed]) => {
-            const normalizedKey = key.toLowerCase(); // Normalize key to lowercase
+            const normalizedKey = key.toLowerCase(); 
             if (pressed) {
                 const baseSpeed = player.speedBoostActive ? 6 : 3;
                 socket.emit('move', { 
@@ -1066,7 +1066,7 @@ window.selectClass = className => {
     
     // Aktualisiere die Beschreibung
     const description = document.getElementById('classDescription');
-    description.textContent = CLASSES[className].description; // Use CLASSES for description
+    description.textContent = CLASSES[className].description; 
 };
 
 // Socket Events
@@ -1144,7 +1144,7 @@ socket.on('speedBoostActive', duration => {
 });
 
 
-// Neue Funktion zum Zeichnen eines Herzens
+// Funktion zum Zeichnen eines Herzens
 function drawHeart(ctx, x, y, size, color) {
     ctx.save();
     ctx.fillStyle = color;
@@ -1210,7 +1210,7 @@ function createDecorationCache() {
     }
 }
 
-// Neue Funktion für Reifenspuren
+// Funktion für Reifenspuren
 function drawTireTracks(ctx, x, y) {
     ctx.save();
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.15)';
@@ -1238,7 +1238,7 @@ function drawTireTracks(ctx, x, y) {
     ctx.restore();
 }
 
-// Neue Funktion für Granatkrater
+// Funktion für Granatkrater
 function drawExplosionCrater(ctx, x, y) {
     ctx.save();
     // Hauptkrater
@@ -1346,7 +1346,7 @@ function initializeStaticDecorations() {
 
 }
 
-// Verbesserte Statusanzeige mit nebeneinander liegenden Herzen
+// Statusanzeige mit nebeneinander liegenden Herzen
 function drawPlayerStatus(ctx, player) {
     ctx.save();
     
