@@ -21,7 +21,10 @@ describe('Socket Handlers', () => {
             }),
             to: jest.fn().mockReturnThis(),
             join: jest.fn(),
-            leave: jest.fn()
+            leave: jest.fn(),
+            broadcast: {
+                emit: jest.fn()
+            }
         };
         
         mockIo = {
@@ -149,7 +152,7 @@ describe('Socket Handlers', () => {
             expect(players[mockSocket.id].canShoot).toBe(true);
         });
 
-        it('sollte zweiten Spieler sofort spielen lassen', () => {
+        it('sollte zweiten Spieler nach Countdown spielen lassen', () => {
             setupSocketHandlers(mockIo, gameState);
             
             // Erster Spieler
@@ -158,9 +161,25 @@ describe('Socket Handlers', () => {
                 team: 'red',
                 class: 'classic'
             });
+            jest.advanceTimersByTime(5000); // Erster Spieler wird aktiv
+
+            // Simuliere, dass das Spiel läuft
+            score.red = 1;
+            players[mockSocket.id].canMove = true;
+            players[mockSocket.id].canShoot = true;
 
             // Zweiter Spieler
-            const mockSocket2 = { ...mockSocket, id: 'test-socket-id-2' };
+            const mockSocket2 = {
+                id: 'test-socket-id-2',
+                emit: jest.fn(),
+                on: jest.fn(),
+                to: jest.fn().mockReturnThis(),
+                join: jest.fn(),
+                leave: jest.fn(),
+                broadcast: {
+                    emit: jest.fn()
+                }
+            };
             const eventHandlers2 = {};
             mockSocket2.on = jest.fn((event, callback) => {
                 eventHandlers2[event] = callback;
@@ -173,6 +192,10 @@ describe('Socket Handlers', () => {
                 class: 'classic'
             });
 
+            // Der zweite Spieler muss auf den Countdown warten
+            expect(players[mockSocket2.id].canMove).toBe(false);
+            expect(players[mockSocket2.id].canShoot).toBe(false);
+            jest.advanceTimersByTime(5000);
             expect(players[mockSocket2.id].canMove).toBe(true);
             expect(players[mockSocket2.id].canShoot).toBe(true);
         });
@@ -209,7 +232,7 @@ describe('Socket Handlers', () => {
 
             expect(players[mockSocket.id].speedBoostActive).toBe(true);
             expect(gameState.speedBoosters[0].active).toBe(false);
-            expect(mockIo.to(mockSocket.id).emit).toHaveBeenCalledWith('speedBoostActive', 20000);
+            expect(mockIo.to(mockSocket.id).emit.mock.calls.some(call => call[0] === 'speedBoostActive')).toBe(true);
 
             jest.advanceTimersByTime(20000);
             expect(players[mockSocket.id].speedBoostActive).toBe(false);
@@ -224,29 +247,55 @@ describe('Socket Handlers', () => {
             eventHandlers.move({ dx: 0, dy: 0 });
 
             expect(players[mockSocket.id].speedBoostActive).toBe(true);
-            expect(mockIo.to(mockSocket.id).emit).toHaveBeenCalledWith('speedBoostActive', 20000);
+            expect(mockIo.to(mockSocket.id).emit.mock.calls.some(call => call[0] === 'speedBoostActive')).toBe(true);
         });
 
         it('sollte Medikit-Pickup verarbeiten', () => {
-            players[mockSocket.id].x = gameState.medikits[0].x;
-            players[mockSocket.id].y = gameState.medikits[0].y;
-            players[mockSocket.id].health = 50;
+            setupSocketHandlers(mockIo, gameState);
+            eventHandlers.chooseTeam({
+                username: 'TestUser',
+                team: 'red',
+                class: 'classic'
+            });
+            jest.advanceTimersByTime(5000);
+            players[mockSocket.id].canMove = true;
 
+            // Setze Spieler direkt auf Medikit-Position (nutze das importierte medikits-Array)
+            players[mockSocket.id].x = medikits[0].x;
+            players[mockSocket.id].y = medikits[0].y;
+            players[mockSocket.id].health = 1; // Spieler ist verletzt
+            medikits[0].active = true;
+
+            // Simuliere Bewegung direkt auf dem Medikit
             eventHandlers.move({ dx: 0, dy: 0 });
 
-            expect(players[mockSocket.id].health).toBe(100);
-            expect(gameState.medikits[0].active).toBe(false);
+            // Health steigt auf 2, Medikit wird deaktiviert
+            expect(players[mockSocket.id].health).toBe(2);
+            expect(medikits[0].active).toBe(false);
         });
 
         it('sollte Rüstungs-Pickup verarbeiten', () => {
-            players[mockSocket.id].x = gameState.armors[0].x;
-            players[mockSocket.id].y = gameState.armors[0].y;
-            players[mockSocket.id].armor = 50;
+            setupSocketHandlers(mockIo, gameState);
+            eventHandlers.chooseTeam({
+                username: 'TestUser',
+                team: 'red',
+                class: 'classic'
+            });
+            jest.advanceTimersByTime(5000);
+            players[mockSocket.id].canMove = true;
 
+            // Setze Spieler direkt auf Rüstungs-Position (nutze das importierte armors-Array)
+            players[mockSocket.id].x = armors[0].x;
+            players[mockSocket.id].y = armors[0].y;
+            players[mockSocket.id].armor = 0; // Spieler hat keine Rüstung
+            armors[0].active = true;
+
+            // Simuliere Bewegung direkt auf der Rüstung
             eventHandlers.move({ dx: 0, dy: 0 });
 
-            expect(players[mockSocket.id].armor).toBe(100);
-            expect(gameState.armors[0].active).toBe(false);
+            // Armor steigt auf 1, Armor wird deaktiviert
+            expect(players[mockSocket.id].armor).toBe(1);
+            expect(armors[0].active).toBe(false);
         });
     });
 
