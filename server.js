@@ -58,11 +58,11 @@ const gameState = {
     lastSpeedBoosterSpawn: 0
 };
 
-// Neue Funktion für präzise Kollisionserkennung
+// Funktion für präzise Kollisionserkennung
 function checkPlayerCollision(player, itemX, itemY) {
-    const PLAYER_WIDTH = 40;  // Spielerbreite
-    const PLAYER_HEIGHT = 40; // Spielerhöhe
-    const ITEM_SIZE = 30;     // Größe der Items
+    const PLAYER_WIDTH = 40;  
+    const PLAYER_HEIGHT = 40;
+    const ITEM_SIZE = 30;     
 
     // Berechne die Grenzen der Hitbox
     const playerLeft = player.x - PLAYER_WIDTH/2;
@@ -83,11 +83,11 @@ function checkPlayerCollision(player, itemX, itemY) {
              playerBottom < itemTop);
 }
 
-// Neue Funktion für Projektil-Spieler-Kollision
+// Funktion für Projektil-Spieler-Kollision
 function checkProjectilePlayerCollision(projectile, player) {
-    const PLAYER_WIDTH = 40;  // Spielerbreite
-    const PLAYER_HEIGHT = 40; // Spielerhöhe
-    const PROJECTILE_SIZE = 8; // Projektilgröße
+    const PLAYER_WIDTH = 40; 
+    const PLAYER_HEIGHT = 40; 
+    const PROJECTILE_SIZE = 8;
 
     // Berechne die Grenzen der Hitbox
     const playerLeft = player.x - PLAYER_WIDTH/2;
