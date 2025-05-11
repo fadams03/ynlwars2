@@ -10,8 +10,8 @@ export const classes = {
         projectileCount: 1,
         spread: 0,
         projectileSpeed: 20,
-        maxDistance: 600,  // Mittlere Reichweite
-        minDamage: 1      // Konstanter Schaden
+        maxDistance: 600,  
+        minDamage: 1      
     },
     sniper: {
         name: 'Scharfschütze',
@@ -21,8 +21,8 @@ export const classes = {
         projectileCount: 1,
         spread: 0,
         projectileSpeed: 20,
-        maxDistance: 1000,  // Hohe Reichweite
-        minDamage: 2      // Konstanter Schaden
+        maxDistance: 1000,  
+        minDamage: 2      
     },
     shotgun: {
         name: 'Shotgun',
